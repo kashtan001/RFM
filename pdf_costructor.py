@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PDF Constructor API для генерации документов Intesa Sanpaolo
-Поддерживает: contratto, garanzia, carta
+Поддерживает: contratto, garanzia, carta, approvazione
 """
 
 from io import BytesIO
@@ -100,7 +100,8 @@ def generate_approvazione_pdf(data: dict) -> BytesIO:
         data (dict): Словарь с данными {
             'name': str - ФИО клиента,
             'amount': float - Сумма кредита,
-            'tan': float - TAN процентная ставка
+            'tan': float - TAN процентная ставка,
+            'duration': int - Срок в месяцах
         }
     
     Returns:
