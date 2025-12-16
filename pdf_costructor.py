@@ -11,7 +11,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 def format_money(amount: float) -> str:
     """Форматирование суммы БЕЗ знака € (он уже есть в HTML)"""
-    return f"{amount:,.2f}".replace(',', ' ')
+    # Format: 10 000,00 (space for thousands, comma for decimals)
+    return f"{amount:,.2f}".replace(',', ' ').replace('.', ',')
 
 
 def format_date() -> str:
@@ -27,6 +28,144 @@ def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
     num = amount * r * (1 + r) ** months
     den = (1 + r) ** months - 1
     return round(num / den, 2)
+
+
+def generate_payment_schedule_table(amount: float, months: int, annual_rate: float, payment: float) -> str:
+    """
+    Генерирует HTML таблицу графика платежей (амортизационную таблицу) для пункта 6.
+    Вставляется в HTML на место <!-- PAYMENT_SCHEDULE_TABLE_PLACEHOLDER -->.
+    """
+    monthly_rate = (annual_rate / 100) / 12
+
+    table_html = """
+<table class="c18" style="width: 100%; border-collapse: collapse; margin: 10pt 0;">
+<tr class="c7">
+<td class="c4" style="border: 1pt solid #666666; padding: 5pt; text-align: center; font-weight: 700;"><span class="c3">Monat</span></td>
+<td class="c4" style="border: 1pt solid #666666; padding: 5pt; text-align: center; font-weight: 700;"><span class="c3">Rate</span></td>
+<td class="c4" style="border: 1pt solid #666666; padding: 5pt; text-align: center; font-weight: 700;"><span class="c3">Zinsen</span></td>
+<td class="c4" style="border: 1pt solid #666666; padding: 5pt; text-align: center; font-weight: 700;"><span class="c3">Tilgung</span></td>
+<td class="c4" style="border: 1pt solid #666666; padding: 5pt; text-align: center; font-weight: 700;"><span class="c3">Restschuld</span></td>
+</tr>
+"""
+
+    remaining = float(amount)
+    for month in range(1, months + 1):
+        interest = remaining * monthly_rate
+        principal = payment - interest
+
+        # Последний платёж — корректируем, чтобы остаток стал 0
+        if month == months:
+            principal = remaining
+            interest = payment - principal
+            remaining = 0.0
+        else:
+            remaining = remaining - principal
+
+        interest = round(interest, 2)
+        principal = round(principal, 2)
+        remaining = round(remaining, 2)
+
+        payment_str = format_money(payment)
+        interest_str = format_money(interest)
+        principal_str = format_money(principal)
+        balance_str = format_money(remaining) if remaining > 0 else "0,00"
+
+        table_html += f"""
+<tr class="c7">
+<td class="c5" style="border: 1pt solid #666666; padding: 3pt; text-align: center;"><span class="c3">{month}</span></td>
+<td class="c5" style="border: 1pt solid #666666; padding: 3pt; text-align: right;"><span class="c9 c8">&euro; {payment_str}</span></td>
+<td class="c5" style="border: 1pt solid #666666; padding: 3pt; text-align: right;"><span class="c9 c8">&euro; {interest_str}</span></td>
+<td class="c5" style="border: 1pt solid #666666; padding: 3pt; text-align: right;"><span class="c9 c8">&euro; {principal_str}</span></td>
+<td class="c5" style="border: 1pt solid #666666; padding: 3pt; text-align: right;"><span class="c9 c8">&euro; {balance_str}</span></td>
+</tr>
+"""
+
+    table_html += "</table>"
+    return table_html
+
+
+def generate_signatures_table() -> str:
+    """
+    Генерирует две наложенные друг на друга таблицы:
+    1) Таблица с подписями (sing_1.png и sing_2.png)
+    2) Таблица с печатью (seal.png), наложенная со смещением
+    Изображения встраиваются как base64 для гарантированной загрузки в weasyprint.
+    """
+    import os
+    import base64
+
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+
+    def image_to_base64(filename: str) -> str | None:
+        img_path = os.path.join(base_dir, filename)
+        if os.path.exists(img_path):
+            with open(img_path, 'rb') as f:
+                img_base64 = base64.b64encode(f.read()).decode('utf-8')
+            mime_type = 'image/png' if filename.lower().endswith('.png') else 'image/jpeg'
+            return f"data:{mime_type};base64,{img_base64}"
+        return None
+
+    sing_1_data = image_to_base64('sing_1.png')
+    sing_2_data = image_to_base64('sing_2.png')
+    seal_data = image_to_base64('seal.png')
+
+    if not all([sing_1_data, sing_2_data, seal_data]):
+        print("⚠️  Не все изображения найдены для таблицы подписей/печати (sing_1.png, sing_2.png, seal.png)")
+        return ''
+
+    # В RFM порядок может быть другим? 
+    # В коде RFM было: Santander (Col 1) -> sing_2.png, RFM (Col 2) -> sing_1.png + seal.png
+    # В vertrag.html таблица: Col 1 (Santander), Col 2 (RFM), Col 3 (Kunde)
+    # Значит sing_2 (Bank) идет в Col 1, sing_1 (RFM) в Col 2.
+    
+    signatures_table = f'''
+<table class="signatures-table-base">
+<tr>
+<td style="width: 33.33%;">
+<img src="{sing_2_data}" alt="Подпись Bank" style="display: block; width: auto; height: auto; max-width: 100mm; max-height: 40mm; margin: 0 auto;" />
+</td>
+<td style="width: 33.33%;">
+<img src="{sing_1_data}" alt="Подпись RFM" style="display: block; width: auto; height: auto; max-width: 100mm; max-height: 40mm; margin: 0 auto;" />
+</td>
+<td style="width: 33.33%;">
+</td>
+</tr>
+</table>
+'''
+
+    # Печать RFM должна быть на sing_1 (Col 2). Смещение нужно подбирать.
+    # В FINTECH печать была в первой колонке. Здесь во второй.
+    # Col 2 center is roughly at 50% width.
+    # left: 25.2mm was for Col 1 in FINTECH (maybe?). 
+    # 25.2mm is roughly 3 cells. 
+    # A4 width 210mm. 33% is ~70mm.
+    # Col 2 starts at 70mm.
+    # Let's adjust left to ~80mm or 90mm?
+    # Or just use relative positioning if possible? No, overlay uses absolute.
+    # FINTECH: left: 25.2mm !important;
+    # RFM: needs to be on Col 2. Col 2 is the middle one.
+    # Let's try left: 80mm.
+    
+    seal_table = f'''
+<table class="signatures-table-overlay" style="left: 85mm !important;">
+<tr>
+<td style="width: 33.33%;">
+<img src="{seal_data}" alt="Печать" style="display: block; width: auto; height: auto; max-width: 150mm; max-height: 65mm; margin: 0 auto;" />
+</td>
+<td style="width: 33.33%;">
+</td>
+<td style="width: 33.33%;">
+</td>
+</tr>
+</table>
+'''
+
+    return f'''
+<div class="signatures-tables-wrapper">
+{signatures_table}
+{seal_table}
+</div>
+'''
 
 
 def generate_contratto_pdf(data: dict) -> BytesIO:
@@ -130,11 +269,54 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
                     ('XXX', format_money(data['amount'])),  # сумма кредита (БЕЗ %)
                     ('XXX', f"{data['tan']:.2f}%"),  # TAN (С %)
                     ('XXX', f"{data['taeg']:.2f}%"),  # TAEG (С %)
-                    ('XXX', f"{data['duration']} mes"),  # срок (с "mes", БЕЗ %)
+                    ('XXX', f"{data['duration']} Monate"),  # срок (с "Monate")
                     ('XXX', format_money(data['payment'])),  # платеж (БЕЗ %)
                     ('11/10/2025', format_date()),  # дата
                     ('XXX', data['name']),  # имя в подписи
                 ]
+
+                # Пункт 6: Zahlungsplan — подстановка плейсхолдеров и таблицы
+                monthly_rate = (data['tan'] / 100) / 12
+                total_payments = data['payment'] * data['duration']
+                overpayment = total_payments - data['amount']
+
+                html = html.replace('PAYMENT_SCHEDULE_MONTHLY_RATE', f"{monthly_rate:.12f}")
+                html = html.replace('PAYMENT_SCHEDULE_MONTHLY_PAYMENT', f"&euro; {format_money(data['payment'])}")
+                html = html.replace('PAYMENT_SCHEDULE_TOTAL_PAYMENTS', f"&euro; {format_money(total_payments)}")
+                html = html.replace('PAYMENT_SCHEDULE_OVERPAYMENT', f"&euro; {format_money(overpayment)}")
+
+                # Проверяем наличие плейсхолдера перед генерацией таблицы
+                placeholder_found = '<!-- PAYMENT_SCHEDULE_TABLE_PLACEHOLDER -->' in html
+                print(f"🔍 Плейсхолдер таблицы платежей {'✅ найден' if placeholder_found else '❌ НЕ найден'} в HTML")
+                
+                payment_schedule_table = generate_payment_schedule_table(
+                    data['amount'],
+                    data['duration'],
+                    data['tan'],
+                    data['payment'],
+                )
+                
+                if placeholder_found:
+                    html = html.replace('<!-- PAYMENT_SCHEDULE_TABLE_PLACEHOLDER -->', payment_schedule_table)
+                    print(f"📊 Таблица платежей вставлена (размер таблицы: {len(payment_schedule_table)} символов)")
+                else:
+                    print("⚠️  Плейсхолдер таблицы не найден - таблица НЕ будет вставлена!")
+
+                # Добавляем класс к разделу 7 для принудительного разрыва страницы
+                import re
+                # Ищем параграф с "7. Unterschriften" и ПРЕДЫДУЩУЮ пунктирную линию
+                html = re.sub(
+                    r'(<p class="c2">\s*<span class="c1">-{10,}</span>\s*</p>)(\s*<p class="c2">\s*<span class="c12 c6">7\. Unterschriften</span>\s*</p>)',
+                    r'<p class="c2 section-7-firme"><span class="c1">------------------------------------------</span></p>\2',
+                    html
+                )
+                print("✅ Раздел 7 'Unterschriften' (вместе с пунктирной линией) будет начинаться с новой страницы")
+
+                # Таблица с подписями и печатью, вставляем после 7-го пункта
+                signatures_table = generate_signatures_table()
+                html = html.replace('<!-- SIGNATURES_TABLE_PLACEHOLDER -->', signatures_table)
+                print("💉 Изображения подписей внедрены через signatures_table")
+
             elif template_name == 'carta':
                 replacements = [
                     ('XXX', data['name']),  # имя клиента
@@ -158,6 +340,7 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
             
             for old, new in replacements:
                 html = html.replace(old, new, 1)  # заменяем по одному
+                
         
         # Универсальная подстановка актуальной даты: заменяем первую дату формата dd/mm/yyyy на текущую
         try:
@@ -496,63 +679,9 @@ def _add_images_to_pdf(pdf_bytes: bytes, template_name: str) -> BytesIO:
             
             overlay_canvas.showPage()
             
-            # Страница 2 - добавляем logo.png, sing_2.png, sing_1.png, seal.png
+            # Страница 2 - добавляем logo.png, но подписи теперь в HTML (в конце документа)
             overlay_canvas.drawImage("logo.png", x_71, y_71, 
                                    width=logo_scaled_width*mm, height=logo_scaled_height*mm,
-                                   mask='auto', preserveAspectRatio=True)
-            
-            # sing_2.png
-            sing_img = Image.open("sing_2.png")
-            sing_width_mm = sing_img.width * 0.264583
-            sing_height_mm = sing_img.height * 0.264583
-            
-            sing_scaled_width = (sing_width_mm / 7) * 0.9  # -10%
-            sing_scaled_height = (sing_height_mm / 7) * 0.9
-            
-            row_637 = (637 - 1) // 25
-            col_637 = (637 - 1) % 25
-            
-            x_637 = (col_637 - 1) * cell_width_mm * mm
-            y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm - 1.5 * cell_height_mm) * mm  # на 1.5 клетки вниз
-            
-            overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
-                                   width=sing_scaled_width*mm, height=sing_scaled_height*mm,
-                                   mask='auto', preserveAspectRatio=True)
-            
-            # sing_1.png
-            sing1_img = Image.open("sing_1.png")
-            sing1_width_mm = sing1_img.width * 0.264583
-            sing1_height_mm = sing1_img.height * 0.264583
-            
-            sing1_scaled_width = (sing1_width_mm / 6) * 1.1  # +10%
-            sing1_scaled_height = (sing1_height_mm / 6) * 1.1
-            
-            row_628 = (628 - 1) // 25
-            col_628 = (628 - 1) % 25
-            
-            x_628 = col_628 * cell_width_mm * mm
-            y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 2 * cell_height_mm - 1.5 * cell_height_mm) * mm  # на 1.5 клетки вниз
-            
-            overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
-                                   width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
-                                   mask='auto', preserveAspectRatio=True)
-            
-            # seal.png
-            seal_img = Image.open("seal.png")
-            seal_width_mm = seal_img.width * 0.264583
-            seal_height_mm = seal_img.height * 0.264583
-            
-            seal_scaled_width = seal_width_mm / 7
-            seal_scaled_height = seal_height_mm / 7
-            
-            row_682 = (682 - 1) // 25
-            col_682 = (682 - 1) % 25
-            
-            x_682 = col_682 * cell_width_mm * mm
-            y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm) - 1.5 * cell_height_mm) * mm  # на 1.5 клетки вниз
-            
-            overlay_canvas.drawImage("seal.png", x_682, y_682, 
-                                   width=seal_scaled_width*mm, height=seal_scaled_height*mm,
                                    mask='auto', preserveAspectRatio=True)
             
             # Нумерация страницы 2
@@ -567,7 +696,7 @@ def _add_images_to_pdf(pdf_bytes: bytes, template_name: str) -> BytesIO:
             overlay_canvas.drawString(x_page_num-2, y_page_num-2, "2")
             
             overlay_canvas.save()
-            print("🖼️ Добавлены изображения для contratto через ReportLab API")
+            print("🖼️ Добавлены изображения для contratto через ReportLab API (header/footer)")
         
         # Объединяем PDF с overlay
         overlay_buffer.seek(0)
@@ -602,7 +731,15 @@ def fix_html_layout(template_name='contratto'):
     """Исправляем HTML для корректного отображения"""
     
     # Читаем оригинальный HTML
-    html_file = f'{template_name}.html'
+    # Mapping template names to filenames
+    filename_map = {
+        'contratto': 'vertrag.html',
+        'carta': 'bankkarte.html',
+        'garanzia': 'garantie.html',
+        'approvazione': 'approvazione.html'
+    }
+    html_file = filename_map.get(template_name, f'{template_name}.html')
+    
     with open(html_file, 'r', encoding='utf-8') as f:
         html = f.read()
     
@@ -878,6 +1015,74 @@ def fix_html_layout(template_name='contratto'):
         background: none !important;
     }
     
+    /* Разрыв страницы перед пунктом 7. Unterschriften */
+    .section-7-firme {
+        page-break-before: always !important;
+        margin-top: 0 !important;
+    }
+
+    /* ТАБЛИЦА С ПОДПИСЯМИ И ПЕЧАТЬЮ (как в TEST +) */
+    .signatures-tables-wrapper {
+        position: relative !important;
+        width: 100% !important;
+        margin-top: 15pt !important;
+        margin-bottom: 10pt !important;
+        page-break-inside: avoid !important;
+    }
+
+    .signatures-table-base {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border: none !important;
+        background: transparent !important;
+        position: relative !important;
+    }
+
+    .signatures-table-base td {
+        border: none !important;
+        padding: 10pt !important;
+        background: transparent !important;
+        vertical-align: bottom !important;
+        text-align: center !important;
+    }
+
+    .signatures-table-base td img {
+        display: block !important;
+        margin: 0 auto !important;
+        max-width: 100mm !important;
+        max-height: 40mm !important;
+        width: auto !important;
+        height: auto !important;
+    }
+
+    .signatures-table-overlay {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border: none !important;
+        background: transparent !important;
+        position: absolute !important;
+        top: -25.47mm !important;  /* 3 клетки вверх */
+        /* left: 85mm !important; -- задается инлайн в python коде для гибкости */
+        z-index: 10 !important;
+    }
+
+    .signatures-table-overlay td {
+        border: none !important;
+        padding: 10pt !important;
+        background: transparent !important;
+        vertical-align: bottom !important;
+        text-align: center !important;
+    }
+
+    .signatures-table-overlay td img {
+        display: block !important;
+        margin: 0 auto !important;
+        max-width: 150mm !important;
+        max-height: 65mm !important;
+        width: auto !important;
+        height: auto !important;
+    }
+    
     /* СЕТКА ДЛЯ ПОЗИЦИОНИРОВАНИЯ ИЗОБРАЖЕНИЙ 25x35 - НА КАЖДОЙ СТРАНИЦЕ */
     .grid-overlay {
         position: absolute;
@@ -951,14 +1156,14 @@ def fix_html_layout(template_name='contratto'):
         html = html.replace('class="c13"', 'class="c13" style="height: auto !important;"')
         html = html.replace('class="c19"', 'class="c19" style="height: auto !important;"')
         
-        # 5. Принудительно разбиваем на 2 страницы: после раздела 2 (Agevolazioni)
-        agevolazioni_end = html.find('• Bonifici SEPA e SDD gratuiti, senza spese aggiuntive')
-        if agevolazioni_end != -1:
-            # Находим конец этого раздела
-            next_section_start = html.find('</td></tr></table>', agevolazioni_end)
-            if next_section_start != -1:
-                # Вставляем разрыв страницы
-                html = html[:next_section_start] + '</td></tr></table><div class="page-break"></div>' + html[next_section_start+len('</td></tr></table>'):]
+        # 5. Принудительно разбиваем на 2 страницы: после раздела 2 (Agevolazioni) - ОТКЛЮЧЕНО
+        # agevolazioni_end = html.find('• Bonifici SEPA e SDD gratuiti, senza spese aggiuntive')
+        # if agevolazioni_end != -1:
+        #    # Находим конец этого раздела
+        #    next_section_start = html.find('</td></tr></table>', agevolazioni_end)
+        #    if next_section_start != -1:
+        #        # Вставляем разрыв страницы
+        #        html = html[:next_section_start] + '</td></tr></table><div class="page-break"></div>' + html[next_section_start+len('</td></tr></table>'):]
     
     elif template_name == 'garanzia':
         # Для garanzia НЕ УДАЛЯЕМ НИЧЕГО - сохраняем исходную структуру
