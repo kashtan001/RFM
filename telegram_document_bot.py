@@ -34,6 +34,9 @@ DEFAULT_TAN = 7.86
 DEFAULT_TAEG = 8.30
 FIXED_TAN_APPROVAZIONE = 7.15  # Фиксированный TAN для approvazione
 
+# Настройки прокси
+PROXY_URL = "http://user351165:35rmsy@185.218.1.162:1479"
+
 
 logging.basicConfig(format="%(asctime)s — %(levelname)s — %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -177,7 +180,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 # ---------------------------- Main -------------------------------------------
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).proxy_url(PROXY_URL).build()
     conv = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -195,6 +198,7 @@ def main():
     print("🤖 Телеграм бот запущен!")
     print("📋 Поддерживаемые документы: /контракт, /гарантия, /карта, /одобрение (итальянские варианты тоже поддерживаются)")
     print("🔧 Использует PDF конструктор из pdf_costructor.py")
+    print("🌐 Подключен через прокси: 185.218.1.162:1479")
     
     app.run_polling()
 
