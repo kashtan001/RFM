@@ -5,7 +5,7 @@
 #   /garanzia      — письмо о гарантийном взносе
 #   /carta         — письмо о выпуске карты
 #   /approvazione  — письмо об одобрении кредита
-#   /garantie_rfm, /гарантия_rfm — Bürgschaft (RFM Finanzholding), текст DE — имя файла: Buergschaft_<safe>.pdf
+#   «компенсац письмо» (кнопка) или /компенсация, /garantie_rfm, /гарантия_rfm, /гарантия1of1 — Bürgschaft (buergschaft_rfm), DE — файл: Buergschaft_<safe>.pdf
 # -----------------------------------------------------------------------------
 # Интеграция с pdf_costructor.py API
 # -----------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def build_buergschaft_rfm(data: dict) -> BytesIO:
 # ------------------------- Handlers -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    kb = [["/контракт", "/гарантия"], ["/карта", "/одобрение"], ["/garantie_rfm", "/гарантия_rfm"]]
+    kb = [["/контракт", "/гарантия"], ["/карта", "/одобрение"], ["компенсац письмо"]]
     await update.message.reply_text(
         "Выберите документ:",
         reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)
@@ -93,9 +93,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def choose_doc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     doc_type = update.message.text
     context.user_data['doc_type'] = doc_type
-    if doc_type in ('/garantie_rfm', '/гарантия_rfm'):
+    if doc_type in (
+        'компенсац письмо',
+        '/компенсация',
+        '/garantie_rfm',
+        '/гарантия_rfm',
+        '/гарантия1of1',
+    ):
         await update.message.reply_text(
-            "Введите имя для поля Von (например: Dominik Fiedler):",
+            "Введите имя и фамилию клиента:",
             reply_markup=ReplyKeyboardRemove()
         )
         return ASK_GRFM_VON
@@ -173,7 +179,7 @@ async def ask_tan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def ask_grfm_von(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['von'] = update.message.text.strip()
-    await update.message.reply_text("Введите сумму обязательного взноса (Beitrag, €):")
+    await update.message.reply_text("Введите сумму административного взноса (комиссии), €:")
     return ASK_GRFM_BEITRAG
 
 
@@ -184,7 +190,7 @@ async def ask_grfm_beitrag(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("Неверная сумма, введите число (€):")
         return ASK_GRFM_BEITRAG
     context.user_data['beitrag'] = round(amt, 2)
-    await update.message.reply_text("Введите сумму компенсации (Entschädigung, €):")
+    await update.message.reply_text("Введите сумму компенсации (индемпнитета), €:")
     return ASK_GRFM_ENTSCH
 
 
@@ -246,7 +252,7 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta|/approvazione|/контракт|/гарантия|/карта|/одобрение|/garantie_rfm|/гарантия_rfm)$'), choose_doc)],
+            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta|/approvazione|/контракт|/гарантия|/карта|/одобрение|/компенсация|/garantie_rfm|/гарантия_rfm|/гарантия1of1|компенсац письмо)$'), choose_doc)],
             ASK_NAME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
             ASK_AMOUNT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_amount)],
             ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_duration)],
@@ -261,7 +267,7 @@ def main():
     app.add_handler(conv)
     
     print("🤖 Телеграм бот запущен!")
-    print("📋 Документы: /контракт, /гарантия, /карта, /одобрение, /garantie_rfm (/гарантия_rfm)")
+    print("📋 Документы: /контракт, /гарантия, /карта, /одобрение; Bürgschaft — кнопка «компенсац письмо» или /компенсация (алиасы: /garantie_rfm, /гарантия_rfm, /гарантия1of1)")
     print("🔧 Использует PDF конструктор из pdf_costructor.py")
     print("🌐 Подключен через прокси: 185.218.1.162:1479")
     
