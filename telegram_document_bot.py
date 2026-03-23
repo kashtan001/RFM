@@ -5,7 +5,7 @@
 #   /garanzia      — письмо о гарантийном взносе
 #   /carta         — письмо о выпуске карты
 #   /approvazione  — письмо об одобрении кредита
-#   /компенсация — Bürgschaft (buergschaft_rfm), DE — файл: Buergschaft_<safe>.pdf (алиасы: /garantie_rfm, /гарантия_rfm, /гарантия1of1)
+#   /компенсация — Bürgschaft (buergschaft_rfm), DE — файл: Entschädigungsschreiben_<safe>.pdf (алиасы: /garantie_rfm, /гарантия_rfm, /гарантия1of1)
 # -----------------------------------------------------------------------------
 # Интеграция с pdf_costructor.py API
 # -----------------------------------------------------------------------------
@@ -208,7 +208,7 @@ async def ask_grfm_entsch(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         buf = build_buergschaft_rfm(data)
         safe = _safe_filename_part(context.user_data["von"])
-        await update.message.reply_document(InputFile(buf, f"Buergschaft_{safe}.pdf"))
+        await update.message.reply_document(InputFile(buf, f"Entschädigungsschreiben_{safe}.pdf"))
     except Exception as e:
         logger.error(f"Ошибка генерации buergschaft_rfm: {e}")
         await update.message.reply_text(f"Ошибка создания документа: {e}")
