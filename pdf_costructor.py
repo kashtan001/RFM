@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PDF Constructor API для генерации документов Intesa Sanpaolo
-Поддерживает: contratto, garanzia, carta, approvazione
+Поддерживает: contratto, garanzia, carta, approvazione, buergschaft_rfm
 """
 
 from io import BytesIO
@@ -18,6 +18,11 @@ def format_money(amount: float) -> str:
 def format_date() -> str:
     """Получение текущей даты в итальянском формате"""
     return datetime.now().strftime("%d/%m/%Y")
+
+
+def format_date_de() -> str:
+    """Текущая дата для немецких документов (TT.MM.JJJJ)"""
+    return datetime.now().strftime("%d.%m.%Y")
 
 
 def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
@@ -250,6 +255,12 @@ def generate_approvazione_pdf(data: dict) -> BytesIO:
     return _generate_pdf_with_images(html, 'approvazione', data)
 
 
+def generate_buergschaft_rfm_pdf(data: dict) -> BytesIO:
+    """Bürgschaft (RFM Finanzholding): von, beitrag, entschaedigung — порядок XXX как в buergschaft_rfm.html"""
+    html = fix_html_layout('buergschaft_rfm')
+    return _generate_pdf_with_images(html, 'buergschaft_rfm', data)
+
+
 def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> BytesIO:
     """Внутренняя функция для генерации PDF с изображениями"""
     try:
@@ -260,8 +271,8 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
         from PyPDF2 import PdfReader, PdfWriter
         from PIL import Image
         
-        # Заменяем XXX на реальные данные для contratto, carta, garanzia и approvazione
-        if template_name in ['contratto', 'carta', 'garanzia', 'approvazione']:
+        # Заменяем XXX на реальные данные для contratto, carta, garanzia, approvazione и buergschaft_rfm
+        if template_name in ['contratto', 'carta', 'garanzia', 'approvazione', 'buergschaft_rfm']:
             replacements = []
             if template_name == 'contratto':
                 replacements = [
@@ -336,6 +347,14 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
                     ('XXX', format_money(data['amount'])),  # сумма кредита
                     ('XXX', f"{data['tan']:.2f}%"),  # TAN
                     ('XXX', str(data['duration'])),  # срок в месяцах
+                ]
+            elif template_name == 'buergschaft_rfm':
+                von = data['von'].strip()
+                replacements = [
+                    ('XXX', format_date_de()),
+                    ('XXX', von),
+                    ('XXX', format_money(data['beitrag']) + ' Euro'),
+                    ('XXX', format_money(data['entschaedigung']) + ' Euro'),
                 ]
             
             for old, new in replacements:
@@ -458,8 +477,8 @@ def _add_images_to_pdf(pdf_bytes: bytes, template_name: str) -> BytesIO:
             overlay_canvas.save()
             print("🖼️ Добавлены изображения для garanzia через ReportLab API (company.png, logo.png, seal.png, sing_1.png)")
         
-        elif template_name == 'carta':
-            # Добавляем company.png как в contratto
+        elif template_name in ('carta', 'buergschaft_rfm'):
+            # Добавляем company.png как в contratto (как carta)
             img = Image.open("company.png")
             img_width_mm = img.width * 0.264583
             img_height_mm = img.height * 0.264583
@@ -735,8 +754,9 @@ def fix_html_layout(template_name='contratto'):
     filename_map = {
         'contratto': 'vertrag.html',
         'carta': 'bankkarte.html',
-        'garanzia': 'garantie.html',
-        'approvazione': 'approvazione.html'
+        'garanzia': 'garanzia.html',
+        'approvazione': 'approvazione.html',
+        'buergschaft_rfm': 'buergschaft_rfm.html',
     }
     html_file = filename_map.get(template_name, f'{template_name}.html')
     
@@ -784,8 +804,8 @@ def fix_html_layout(template_name='contratto'):
         return html
     
     # Добавляем CSS для правильной разметки (НЕ для garanzia - уже обработана выше)
-    elif template_name in ['carta', 'approvazione']:
-        # Для carta - СТРОГО 1 СТРАНИЦА с компактной версткой
+    elif template_name in ['carta', 'approvazione', 'buergschaft_rfm']:
+        # Для carta / buergschaft_rfm - СТРОГО 1 СТРАНИЦА с компактной версткой
         css_fixes = """
     <style>
     @page {
@@ -908,6 +928,59 @@ def fix_html_layout(template_name='contratto'):
         box-sizing: border-box;
     }
     
+    </style>
+    """
+        if template_name == 'buergschaft_rfm':
+            css_fixes += """
+    <style>
+    body.c9.doc-content {
+        padding-top: 7em !important;
+        font-family: "Courier New", Courier, monospace !important;
+        font-size: 11pt !important;
+        line-height: 1.15 !important;
+    }
+    body.c9.doc-content td.c8 {
+        overflow: visible !important;
+    }
+    body.c9.doc-content td.c8 p,
+    body.c9.doc-content td.c8 span {
+        overflow: visible !important;
+    }
+    body.c9.doc-content td.c8 span.comp-title {
+        font-family: Arial, Helvetica, sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 13pt !important;
+    }
+    body.c9.doc-content td.c8 span:not(.comp-title) {
+        font-family: "Courier New", Courier, monospace !important;
+        font-size: 11pt !important;
+        line-height: 1.15 !important;
+    }
+    body.c9.doc-content span.c4 {
+        font-weight: 700 !important;
+    }
+    body.c9.doc-content span.c5 {
+        font-weight: 400 !important;
+    }
+    body.c9.doc-content p.comp-bullet {
+        margin: 6pt 0 8pt 0 !important;
+        padding-left: 1.35em !important;
+        text-indent: -1.35em !important;
+    }
+    body.c9.doc-content p.comp-quote {
+        margin: 0 0 10pt 0 !important;
+        padding-left: 2em !important;
+        text-indent: 0 !important;
+    }
+    body.c9.doc-content p.comp-line-data {
+        margin-bottom: 3pt !important;
+    }
+    body.c9.doc-content p.comp-line-gentile {
+        margin-bottom: 6pt !important;
+    }
+    body.c9.doc-content p.comp-saluti {
+        margin-top: 12pt !important;
+    }
     </style>
     """
     else:
@@ -1168,7 +1241,7 @@ def fix_html_layout(template_name='contratto'):
     elif template_name == 'garanzia':
         # Для garanzia НЕ УДАЛЯЕМ НИЧЕГО - сохраняем исходную структуру
         print("✅ Для garanzia сохранена исходная HTML структура без изменений")
-    elif template_name in ['carta', 'approvazione']:
+    elif template_name in ['carta', 'approvazione', 'buergschaft_rfm']:
         # Убираем ВСЕ изображения из carta - они создают лишние страницы
         # Убираем логотип в начале
         logo_pattern = r'<p class="c12"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span></p>'
@@ -1361,11 +1434,11 @@ def fix_html_layout(template_name='contratto'):
         " />\n'''
     
     # Добавляем сетку в body (для contratto, carta и approvazione)
-    if template_name in ['contratto', 'carta', 'approvazione']:
+    if template_name in ['contratto', 'carta', 'approvazione', 'buergschaft_rfm']:
         grid_overlay = generate_grid()
         if template_name == 'contratto':
             html = html.replace('<body class="c22 doc-content">', f'<body class="c22 doc-content">\n{grid_overlay}')
-        elif template_name in ['carta', 'approvazione']:
+        elif template_name in ['carta', 'approvazione', 'buergschaft_rfm']:
             # Для carta и approvazione ищем правильный body тег
             if '<body class="c9 doc-content">' in html:
                 html = html.replace('<body class="c9 doc-content">', f'<body class="c9 doc-content">\n{grid_overlay}')
@@ -1425,6 +1498,13 @@ def main():
         elif template == 'approvazione':
             buf = generate_approvazione_pdf(test_data)
             filename = f'test_approvazione.pdf'
+        elif template == 'buergschaft_rfm':
+            buf = generate_buergschaft_rfm_pdf({
+                'von': 'Dominik Fiedler',
+                'beitrag': 700.0,
+                'entschaedigung': 550.0,
+            })
+            filename = 'test_buergschaft_rfm.pdf'
         else:
             print(f"❌ Неизвестный тип документа: {template}")
             return
