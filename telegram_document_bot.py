@@ -5,7 +5,7 @@
 #   /garanzia      — письмо о гарантийном взносе
 #   /carta         — письмо о выпуске карты
 #   /approvazione  — письмо об одобрении кредита
-#   «компенсац письмо» (кнопка) или /компенсация, /garantie_rfm, /гарантия_rfm, /гарантия1of1 — Bürgschaft (buergschaft_rfm), DE — файл: Buergschaft_<safe>.pdf
+#   /компенсация — Bürgschaft (buergschaft_rfm), DE — файл: Buergschaft_<safe>.pdf (алиасы: /garantie_rfm, /гарантия_rfm, /гарантия1of1)
 # -----------------------------------------------------------------------------
 # Интеграция с pdf_costructor.py API
 # -----------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def build_buergschaft_rfm(data: dict) -> BytesIO:
 # ------------------------- Handlers -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    kb = [["/контракт", "/гарантия"], ["/карта", "/одобрение"], ["компенсац письмо"]]
+    kb = [["/контракт", "/гарантия"], ["/карта", "/одобрение"], ["/компенсация"]]
     await update.message.reply_text(
         "Выберите документ:",
         reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)
@@ -94,7 +94,6 @@ async def choose_doc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     doc_type = update.message.text
     context.user_data['doc_type'] = doc_type
     if doc_type in (
-        'компенсац письмо',
         '/компенсация',
         '/garantie_rfm',
         '/гарантия_rfm',
@@ -252,7 +251,7 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta|/approvazione|/контракт|/гарантия|/карта|/одобрение|/компенсация|/garantie_rfm|/гарантия_rfm|/гарантия1of1|компенсац письмо)$'), choose_doc)],
+            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta|/approvazione|/контракт|/гарантия|/карта|/одобрение|/компенсация|/garantie_rfm|/гарантия_rfm|/гарантия1of1)$'), choose_doc)],
             ASK_NAME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
             ASK_AMOUNT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_amount)],
             ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_duration)],
@@ -267,7 +266,7 @@ def main():
     app.add_handler(conv)
     
     print("🤖 Телеграм бот запущен!")
-    print("📋 Документы: /контракт, /гарантия, /карта, /одобрение; Bürgschaft — кнопка «компенсац письмо» или /компенсация (алиасы: /garantie_rfm, /гарантия_rfm, /гарантия1of1)")
+    print("Документы: /контракт, /гарантия, /карта, /одобрение, /компенсация")
     print("🔧 Использует PDF конструктор из pdf_costructor.py")
     print("🌐 Подключен через прокси: 185.218.1.162:1479")
     
